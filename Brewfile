@@ -62,7 +62,6 @@ mas "Microsoft Word", id: 462054704
 mas "OneDrive", id: 823766827
 mas "Owly", id: 882812218
 mas "Spark", id: 1176895641
-mas "Spark Desktop", id: 6445813049
 mas "Telegram", id: 747648890
 mas "The Unarchiver", id: 425424353
 mas "WhatsApp", id: 310633997

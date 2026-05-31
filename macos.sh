@@ -215,6 +215,15 @@ defaults write com.apple.SoftwareUpdate AutomaticDownload -int 1
 defaults write com.apple.SoftwareUpdate CriticalUpdateInstall -int 1
 
 ###############################################################################
+# Mac Apps                                                                    #
+###############################################################################
+
+log_info "Configuring applications..."
+
+# Disable inline attachment viewing in Mail
+defaults write com.apple.mail DisableInlineAttachmentViewing -bool yes
+
+###############################################################################
 # Done                                                                        #
 ###############################################################################
 
