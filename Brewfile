@@ -35,6 +35,7 @@ brew "kubernetes-cli"
 brew "librsvg"
 brew "libusb-compat"
 brew "lsusb"
+brew "mas"
 brew "midnight-commander"
 brew "mole"
 brew "needle"
@@ -45,8 +46,27 @@ brew "qemu"
 brew "trivy"
 brew "vexctl"
 brew "vips"
+cask "bruno"
 cask "stats"
 cask "warp"
+cask "zed"
+mas "Apple Configurator", id: 1037126344
+mas "Cleaner for Xcode", id: 1296084683
+mas "Developer", id: 640199958
+mas "HP Smart", id: 1474276998
+mas "Microsoft Excel", id: 462058435
+mas "Microsoft OneNote", id: 784801555
+mas "Microsoft Outlook", id: 985367838
+mas "Microsoft PowerPoint", id: 462062816
+mas "Microsoft Word", id: 462054704
+mas "OneDrive", id: 823766827
+mas "Owly", id: 882812218
+mas "Spark", id: 1176895641
+mas "Spark Desktop", id: 6445813049
+mas "Telegram", id: 747648890
+mas "The Unarchiver", id: 425424353
+mas "WhatsApp", id: 310633997
+mas "Xcode", id: 497799835
 vscode "aeschli.vscode-css-formatter"
 vscode "alefragnani.project-manager"
 vscode "bierner.color-info"
@@ -59,7 +79,6 @@ vscode "docker.docker"
 vscode "dsznajder.es7-react-js-snippets"
 vscode "esbenp.prettier-vscode"
 vscode "formulahendry.code-runner"
-vscode "github.copilot-chat"
 vscode "humao.rest-client"
 vscode "jock.svg"
 vscode "johnpapa.vscode-peacock"

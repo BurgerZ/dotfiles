@@ -318,6 +318,8 @@ if [ -f "${DOTFILES_DIR}/Brewfile" ]; then
                 postman) app_name="Postman" ;;
                 pgadmin4) app_name="pgAdmin 4" ;;
                 expo-orbit) app_name="Expo Orbit" ;;
+                bruno) app_name="Bruno" ;;
+                zed) app_name="Zed" ;;
                 *) app_name="" ;;
             esac
 
