@@ -1,0 +1,509 @@
+#!/usr/bin/env bash
+# Mac Bootstrap Script
+# Run this on a fresh Mac to set everything up
+# This script is idempotent - safe to run multiple times
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${BLUE}==>${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}!${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+# Get the dotfiles directory
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo ""
+log_info "========================================"
+log_info "Mac Bootstrap Script"
+log_info "========================================"
+echo ""
+log_info "Starting Mac bootstrap from ${DOTFILES_DIR}"
+echo ""
+
+# ==============================================================================
+# GIT CONFIGURATION (MUST happen early, before any potentially failing commands)
+# ==============================================================================
+#
+# Why here? With set -e, if brew/etc fails later, script exits immediately.
+# Git config at the end of the script = never written if anything fails first.
+# Solution: Write config IMMEDIATELY after collecting it.
+#
+# Why check for git binary? On fresh Mac, git doesn't exist until Xcode CLT installed.
+# If git unavailable, we still collect info and write it later (after Xcode).
+# ==============================================================================
+
+GIT_AVAILABLE=false
+if command -v git &> /dev/null; then
+    GIT_AVAILABLE=true
+fi
+
+# Check existing config (only if git available)
+GIT_NAME=""
+GIT_EMAIL=""
+if [ "$GIT_AVAILABLE" = true ]; then
+    GIT_NAME=$(git config --global user.name 2>/dev/null || echo "")
+    GIT_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
+fi
+
+# Debug: Show what we found
+if [ -n "$GIT_NAME" ]; then
+    log_info "Found existing git name: $GIT_NAME"
+fi
+if [ -n "$GIT_EMAIL" ]; then
+    log_info "Found existing git email: $GIT_EMAIL"
+fi
+
+# Collect git info if needed
+if [ -z "${GIT_NAME}" ] || [ -z "${GIT_EMAIL}" ]; then
+    log_info "First, let's collect some information..."
+    log_info "(Required for Git commits - stored in ~/.gitconfig)"
+    echo ""
+    log_warning "Git user information not configured"
+
+    if [ -z "${GIT_NAME}" ]; then
+        read -p "Enter your full name (for Git commits): " GIT_NAME
+    else
+        log_success "Using existing Git name: $GIT_NAME"
+    fi
+
+    if [ -z "${GIT_EMAIL}" ]; then
+        read -p "Enter your email (for Git commits): " GIT_EMAIL
+    else
+        log_success "Using existing Git email: $GIT_EMAIL"
+    fi
+
+    echo ""
+else
+    log_success "Git already configured: $GIT_NAME <$GIT_EMAIL>"
+    echo ""
+fi
+
+# CRITICAL: Write git config IMMEDIATELY if git is available
+# This ensures config persists even if script fails later
+if [ "$GIT_AVAILABLE" = true ] && [ -n "$GIT_NAME" ] && [ -n "$GIT_EMAIL" ]; then
+    # Create ~/.gitconfig if it doesn't exist
+    if [ ! -f ~/.gitconfig ]; then
+        touch ~/.gitconfig
+        log_info "Created ~/.gitconfig"
+    fi
+
+    # Write user.name if not already correct
+    current_name=$(git config --global user.name 2>/dev/null || echo "")
+    if [ "$current_name" != "$GIT_NAME" ]; then
+        git config --global user.name "$GIT_NAME"
+        log_success "Set git user.name: $GIT_NAME"
+    fi
+
+    # Write user.email if not already correct
+    current_email=$(git config --global user.email 2>/dev/null || echo "")
+    if [ "$current_email" != "$GIT_EMAIL" ]; then
+        git config --global user.email "$GIT_EMAIL"
+        log_success "Set git user.email: $GIT_EMAIL"
+    fi
+
+    # Add include directive for dotfiles/.gitconfig (use ~ for portability)
+    if [ -f "${DOTFILES_DIR}/.gitconfig" ]; then
+        # Use ~/dotfiles path for portability across machines/usernames
+        if ! grep -q 'path = ~/dotfiles/.gitconfig' ~/.gitconfig 2>/dev/null; then
+            # Remove any existing absolute path includes for dotfiles
+            sed -i '' '/path = .*dotfiles\/.gitconfig/d' ~/.gitconfig 2>/dev/null || true
+            # Remove empty [include] sections
+            sed -i '' '/^\[include\]$/{N;/^\[include\]\n$/d;}' ~/.gitconfig 2>/dev/null || true
+            # Add portable include
+            printf '\n[include]\n\tpath = ~/dotfiles/.gitconfig\n' >> ~/.gitconfig
+            log_success "Set include.path: ~/dotfiles/.gitconfig"
+        fi
+    fi
+
+    log_success "Git configuration complete"
+    echo ""
+elif [ "$GIT_AVAILABLE" = false ]; then
+    log_warning "Git not available yet - config will be written after Xcode installation"
+    log_info "Values collected: $GIT_NAME <$GIT_EMAIL>"
+    echo ""
+fi
+
+# Check if we're on macOS
+if [[ "$(uname)" != "Darwin" ]]; then
+    log_error "This script is only for macOS"
+    exit 1
+fi
+
+# Install Xcode Command Line Tools
+if ! xcode-select -p &> /dev/null; then
+    log_info "Installing Xcode Command Line Tools..."
+    xcode-select --install
+    echo ""
+    log_warning "MANUAL STEP REQUIRED:"
+    log_warning "1. Complete the Xcode installation popup"
+    log_warning "2. Wait for 'The software was installed' message"
+    log_warning "3. Re-run this script: ./bootstrap.sh"
+    echo ""
+    log_info "Script will exit now. See you in ~5 minutes!"
+    exit 0
+else
+    log_success "Xcode Command Line Tools installed"
+
+    # xcodebuild is unavailable on Command Line Tools-only installs.
+    # Only run license acceptance when full Xcode is installed.
+    if [ -d "/Applications/Xcode.app" ]; then
+        sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+        if ! sudo xcodebuild -license check &> /dev/null; then
+            log_info "Accepting Xcode license agreement..."
+            sudo xcodebuild -license accept
+            log_success "Xcode license accepted"
+        fi
+    else
+        log_info "Full Xcode not detected; skipping Xcode license acceptance (CLT-only is OK)"
+    fi
+
+    # Now that Xcode is installed, write git config if we collected it earlier but couldn't write
+    # This handles the case where git wasn't available on first pass (before Xcode)
+    if [ "$GIT_AVAILABLE" = false ] && [ -n "$GIT_NAME" ] && [ -n "$GIT_EMAIL" ]; then
+        log_info "Git now available - writing collected configuration..."
+
+        # Create ~/.gitconfig if needed
+        if [ ! -f ~/.gitconfig ]; then
+            touch ~/.gitconfig
+            log_info "Created ~/.gitconfig"
+        fi
+
+        git config --global user.name "$GIT_NAME"
+        log_success "Set git user.name: $GIT_NAME"
+
+        git config --global user.email "$GIT_EMAIL"
+        log_success "Set git user.email: $GIT_EMAIL"
+
+        # Add include directive (use ~ for portability)
+        if [ -f "${DOTFILES_DIR}/.gitconfig" ]; then
+            if ! grep -q 'path = ~/dotfiles/.gitconfig' ~/.gitconfig 2>/dev/null; then
+                printf '\n[include]\n\tpath = ~/dotfiles/.gitconfig\n' >> ~/.gitconfig
+                log_success "Set include.path: ~/dotfiles/.gitconfig"
+            fi
+        fi
+
+        GIT_AVAILABLE=true
+        log_success "Git configuration complete"
+        echo ""
+    fi
+fi
+
+# Install Homebrew
+if ! command -v brew &> /dev/null; then
+    log_info "Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # Add Homebrew to PATH for Apple Silicon
+    if [[ $(uname -m) == 'arm64' ]]; then
+        # Only add if not already present
+        if ! grep -q "/opt/homebrew/bin/brew shellenv" ~/.zprofile 2>/dev/null; then
+            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+        fi
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    fi
+    log_success "Homebrew installed"
+else
+    log_success "Homebrew already installed"
+fi
+
+# Update Homebrew
+log_info "Updating Homebrew (this may take a minute)..."
+brew update --quiet 2>&1 | grep -v "^Already up-to-date" || log_success "Homebrew updated"
+
+# Install mas (Mac App Store CLI) first if not present
+if ! command -v mas &> /dev/null; then
+    log_info "Installing mas (Mac App Store CLI)..."
+    brew install mas
+    log_success "mas installed"
+else
+    log_success "mas already installed"
+fi
+
+# Verify App Store sign-in (mas account can be unreliable)
+if ! mas account &> /dev/null; then
+    log_warning "Cannot verify Mac App Store sign-in"
+    echo ""
+    log_info "Some apps require App Store authentication:"
+    log_info "  - Things 3 (task manager)"
+    log_info "  - Amphetamine (prevent sleep)"
+    log_info "  - Bear, Fantastical, etc."
+    echo ""
+    log_info "To sign in: System Settings > Media & Purchases > Sign In"
+    echo ""
+    read -p "Are you signed into the App Store? (y/N) " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_warning "App Store apps will be skipped (install manually later)"
+        log_info "You can re-run bootstrap after signing in to retry"
+    else
+        log_success "Proceeding with App Store apps"
+    fi
+    echo ""
+fi
+
+# Install from Brewfile
+if [ -f "${DOTFILES_DIR}/Brewfile" ]; then
+    log_info "Checking which apps are already installed..."
+
+    # Create temporary filtered Brewfile excluding manually-installed casks
+    TEMP_BREWFILE=$(mktemp)
+
+    # Copy Brewfile, filtering out casks where app already exists
+    while IFS= read -r line; do
+        # Check if line is a cask declaration
+        if [[ "$line" =~ ^cask[[:space:]]+\"([^\"]+)\" ]]; then
+            cask_name="${BASH_REMATCH[1]}"
+
+            # Map cask name to app name (what appears in /Applications)
+            case "$cask_name" in
+                docker) app_name="Docker" ;;
+                cursor) app_name="Cursor" ;;
+                visual-studio-code) app_name="Visual Studio Code" ;;
+                google-chrome) app_name="Google Chrome" ;;
+                arc) app_name="Arc" ;;
+                firefox) app_name="Firefox" ;;
+                brave-browser) app_name="Brave Browser" ;;
+                claude-code) app_name="Claude Code" ;;
+                claude) app_name="Claude" ;;
+                chatgpt) app_name="ChatGPT" ;;
+                slack) app_name="Slack" ;;
+                discord) app_name="Discord" ;;
+                notion) app_name="Notion" ;;
+                zoom) app_name="zoom.us" ;;
+                raycast) app_name="Raycast" ;;
+                alfred) app_name="Alfred 5" ;;
+                obsidian) app_name="Obsidian" ;;
+                bear) app_name="Bear" ;;
+                fantastical) app_name="Fantastical" ;;
+                signal) app_name="Signal" ;;
+                whatsapp) app_name="WhatsApp" ;;
+                beeper) app_name="Beeper Desktop" ;;
+                1password) app_name="1Password" ;;
+                rectangle) app_name="Rectangle" ;;
+                multipass) app_name="Multipass" ;;
+                cleanshot) app_name="CleanShot X" ;;
+                ngrok) app_name="ngrok" ;;
+                the-unarchiver) app_name="The Unarchiver" ;;
+                dropbox) app_name="Dropbox" ;;
+                cyberduck) app_name="Cyberduck" ;;
+                istat-menus) app_name="iStat Menus" ;;
+                daisydisk) app_name="DaisyDisk" ;;
+                figma) app_name="Figma" ;;
+                blender) app_name="Blender" ;;
+                spotify) app_name="Spotify" ;;
+                vlc) app_name="VLC" ;;
+                iterm2) app_name="iTerm" ;;
+                tailscale) app_name="Tailscale" ;;
+                warp) app_name="Warp" ;;
+                postman) app_name="Postman" ;;
+                pgadmin4) app_name="pgAdmin 4" ;;
+                expo-orbit) app_name="Expo Orbit" ;;
+                *) app_name="" ;;
+            esac
+
+            # Check if app already exists in /Applications
+            if [ -n "$app_name" ]; then
+                if [ -d "/Applications/${app_name}.app" ]; then
+                    log_warning "Skipping $cask_name (already installed)"
+                    echo "# Skipped: $line" >> "$TEMP_BREWFILE"
+                    continue
+                fi
+            fi
+        fi
+        echo "$line" >> "$TEMP_BREWFILE"
+    done < "${DOTFILES_DIR}/Brewfile"
+
+    # Count total items to install
+    total_items=$(grep -E '^(brew|cask|mas|vscode)' "$TEMP_BREWFILE" | wc -l | xargs)
+
+    log_info "Installing apps and tools from Brewfile"
+    log_info "Queued: $total_items packages/apps to install"
+    log_warning "This typically takes 5-10 minutes depending on what's new..."
+    log_info "Progress will appear below (Homebrew shows each item)"
+    log_warning "Large apps (Docker, Xcode, Chrome) may pause 1-2 minutes - this is normal"
+    log_info "You may be prompted for your password once..."
+    echo ""
+
+    # Refresh sudo timestamp to avoid multiple password prompts
+    sudo -v
+
+    # Keep sudo alive in background during long install
+    log_info "Starting background sudo keepalive (prevents repeated password prompts)"
+    (while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null) &
+    SUDO_KEEPALIVE_PID=$!
+
+    echo ""
+    log_info "Starting Homebrew installations (verbose mode - you'll see everything)..."
+    log_warning "Initial phase: Homebrew may check package info for 1-2 minutes before installations start"
+    log_warning "Large downloads may take several minutes each (be patient during 'Verifying' phase)"
+    echo ""
+
+    # Use --no-upgrade to skip already-installed apps, --verbose to show progress immediately
+    # Note: brew bundle can hang on parallel downloads. If stuck for >5min, Ctrl+C and re-run
+    brew bundle --file="$TEMP_BREWFILE" --no-upgrade --verbose
+
+    echo ""
+
+    # Kill sudo keepalive
+    log_info "Stopping sudo keepalive"
+    kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    wait "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+
+    # Clean up
+    rm -f "$TEMP_BREWFILE"
+
+    echo ""
+    log_success "Brewfile installed"
+else
+    log_warning "Brewfile not found, skipping..."
+fi
+
+# Symlink dotfiles
+log_info "Symlinking dotfiles..."
+bash "${DOTFILES_DIR}/install.sh"
+
+# Set up UV (if not via brew)
+if ! command -v uv &> /dev/null; then
+    log_info "Installing UV..."
+    curl -LsSf https://astral.sh/uv/install.sh | bash
+    log_success "UV installed"
+else
+    log_success "UV already installed"
+fi
+
+# Set up NVM
+if ! command -v nvm &> /dev/null; then
+    log_info "Installing NVM..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+    log_success "NVM installed"
+else
+    log_success "NVM already installed"
+fi
+
+# Set up Bun
+if ! command -v bun &> /dev/null; then
+    log_info "Installing Bun..."
+    curl -fsSL https://bun.sh/install | bash
+    log_success "Bun installed"
+else
+    log_success "Bun already installed"
+fi
+
+# Configure macOS defaults
+if [ -f "${DOTFILES_DIR}/macos.sh" ]; then
+    if [ -f ~/.macos-defaults-applied ]; then
+        log_success "macOS defaults already applied"
+        log_info "(Delete ~/.macos-defaults-applied to re-apply)"
+    else
+        echo ""
+        log_warning "macOS System Defaults Configuration"
+        log_info "This will change:"
+        log_info "  ✓ Finder: show hidden files, extensions, path bar"
+        log_info "  ✓ Dock: auto-hide, faster animations, smaller icons"
+        log_info "  ✓ Screenshots: save to ~/Screenshots as PNG"
+        log_info "  ✓ Keyboard: faster key repeat, disable autocorrect"
+        log_info "  ✓ Trackpad: tap to click enabled"
+        echo ""
+        log_warning "Some changes require restart to take effect"
+        echo ""
+        read -p "Apply macOS defaults? (y/n) " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            bash "${DOTFILES_DIR}/macos.sh"
+            touch ~/.macos-defaults-applied
+            log_success "macOS defaults configured"
+        else
+            log_info "Skipped macOS defaults configuration"
+        fi
+    fi
+fi
+
+# Mackup restore (restore app settings from iCloud)
+if command -v mackup &> /dev/null; then
+    MACKUP_ICLOUD_DIR="${HOME}/Library/Mobile Documents/com~apple~CloudDocs/Mackup"
+
+    if [ -d "$MACKUP_ICLOUD_DIR" ]; then
+        echo ""
+        log_info "Mackup iCloud folder detected"
+        log_info "This will restore app settings from your previous Mac"
+        echo ""
+        read -p "Run mackup restore? (y/N) " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Restoring app settings from iCloud..."
+            mackup restore --force
+            echo ""
+            log_success "App settings restored from iCloud"
+        else
+            log_info "Skipped mackup restore"
+            log_info "You can restore later with: mackup restore"
+        fi
+    else
+        log_warning "Mackup iCloud folder not found"
+        log_info "If this is a fresh Mac with no previous settings, ignore this"
+        log_info "If cloning from another Mac, wait for iCloud sync then run: mackup restore"
+    fi
+else
+    log_warning "Mackup not installed, skipping app settings restore"
+fi
+
+# Verify Git configuration (config was written earlier in the script)
+log_info "Verifying Git configuration..."
+if [ -f ~/.gitconfig ]; then
+    final_name=$(git config --global user.name 2>/dev/null || echo "")
+    final_email=$(git config --global user.email 2>/dev/null || echo "")
+    if [ -n "$final_name" ] && [ -n "$final_email" ]; then
+        log_success "Git configured: $final_name <$final_email>"
+    else
+        log_error "Git config file exists but user.name/email missing!"
+        log_error "Run: git config --global user.name 'Your Name'"
+        log_error "Run: git config --global user.email 'your@email.com'"
+    fi
+else
+    log_error "~/.gitconfig does not exist!"
+    log_error "This should not happen - please report this bug"
+fi
+
+# Post-install authentication setup
+log_info "========================================"
+log_info "Bootstrap complete! Next steps:"
+log_info "========================================"
+echo ""
+log_warning "Manual authentication required:"
+echo "  1. gh auth login"
+echo "  2. Sign into Apple ID in System Settings"
+echo "  3. Restart your terminal or run: source ~/.zshrc"
+echo ""
+log_success "All done! Enjoy your new Mac 🎉"
+echo ""
+
+# Offer to run auth-setup
+if [ -f "${DOTFILES_DIR}/auth-setup.sh" ]; then
+    read -p "Run guided authentication setup now? (y/N) " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        bash "${DOTFILES_DIR}/auth-setup.sh"
+    else
+        log_info "You can run authentication setup later with: ./auth-setup.sh"
+    fi
+fi

@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Backup files
+*.backup.*
+*.backup
+
+# Local overrides (not synced)
+*.local
+*.local.*
+
+# Sensitive data
+*.key
+*.pem
+*.cert
+credentials/
+
+# Environment files
+.env
+
+# But track the example
+!.env.example
+
+# Update check timestamp
+.last-update-check
