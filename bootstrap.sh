@@ -320,6 +320,10 @@ if [ -f "${DOTFILES_DIR}/Brewfile" ]; then
                 expo-orbit) app_name="Expo Orbit" ;;
                 bruno) app_name="Bruno" ;;
                 zed) app_name="Zed" ;;
+                omnidisksweeper) app_name="OmniDiskSweeper" ;;
+                db-browser-for-sqlite) app_name="DB Browser for SQLite" ;;
+                hex-fiend) app_name="Hex Fiend" ;;
+                balenaetcher) app_name="balenaEtcher" ;;
                 *) app_name="" ;;
             esac
 
