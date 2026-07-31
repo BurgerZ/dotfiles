@@ -22,6 +22,7 @@ HOME_DIR="$HOME"
 
 # Files to symlink
 files=(
+    ".p10k.zsh"
     ".zshrc"
     ".mackup.cfg"
     ".nanorc"
@@ -29,7 +30,6 @@ files=(
     "aliases.zsh"
     "functions.zsh"
     "check-updates.zsh"
-    ".p10k.zsh"
 )
 
 # Create symlinks
