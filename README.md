@@ -31,8 +31,9 @@ graph LR
     B -->|No| D[Add to Queue]
     C --> E[Log Warning]
     D --> F[Install via Homebrew]
-    style C fill:#ffc107
-    style D fill:#4caf50
+    style C fill:#ffc107, color:#000000
+    style D fill:#4caf50, color:#000000
+
 ```
 
 ### Automatic Update System
@@ -159,9 +160,9 @@ graph TD
     L --> M
     M --> N[Complete]
 
-    style A fill:#2196f3
-    style N fill:#4caf50
-    style F fill:#ff9800
+    style A fill:#2196f3, color:#000000
+    style N fill:#4caf50, color:#000000
+    style F fill:#ff9800, color:#000000
 ```
 
 ### File Structure
@@ -443,8 +444,8 @@ graph LR
     A --> E[check-updates.zsh]
     A --> F[.zshrc.local]
 
-    style A fill:#2196f3
-    style F fill:#4caf50,stroke-dasharray: 5 5
+    style A fill:#2196f3, color:#000000
+    style F fill:#4caf50,stroke-dasharray: 5 5, color:#000000
 ```
 
 ### Shell Aliases Reference
